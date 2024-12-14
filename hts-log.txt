@@ -1,13 +1,256 @@
-HTTrack3.49-2+htsswf+htsjava launched on Sun, 08 Dec 2024 12:59:17 at https://koolkev246.com/ +*.png +*.gif +*.jpg +*.jpeg +*.css +*.js -ad.doubleclick.net/* -mime:application/foobar
-(winhttrack -qwC2%Ps2u1%s%uN0%I0p3DaK0H0%kf2A25000%f#f -F "Mozilla/4.5 (compatible; HTTrack 3.0x; Windows 98)" -%F "<!-- Mirrored from %s%s by HTTrack Website Copier/3.x [XR&CO'2014], %s -->" -%l "en, *" https://koolkev246.com/ -O1 "C:\My Web Sites\https___koolkev246.com_" +*.png +*.gif +*.jpg +*.jpeg +*.css +*.js -ad.doubleclick.net/* -mime:application/foobar )
-
-Information, Warnings and Errors reported for this mirror:
-note:	the hts-log.txt file, and hts-cache folder, may contain sensitive information,
-	such as username/password authentication for websites mirrored in this project
-	do not share these files/folders if you want these information to remain private
-
-12:59:26	Error: 	"Bad Request" (400) at link https://www.googletagmanager.com/gtm.js?id= (from https://koolkev246.com/)
-12:59:26	Error: 	"Bad Request" (400) at link https://koolkev246.com/cdn-cgi/zaraz/s.js?z= (from https://koolkev246.com/)
-
-HTTrack Website Copier/3.49-2 mirror complete in 9 seconds : 27 links scanned, 24 files written (3126476 bytes overall) [2838315 bytes received at 315368 bytes/sec], 517417 bytes transferred using HTTP compression in 18 files, ratio 37%, 4.0 requests per connection
-(2 errors, 0 warnings, 0 messages)
+--// Variables
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ESP_Library = SharedRequires["PLAYER ESP BUILDER"]
+local Entity_List = {}
+local unload_list = {}
+local ESP_SETTINGS = {
+    Enabled = true,
+    ShowBox = true,
+    ShowName = true,
+    ShowHealth = true,
+    ShowDistance = true,
+    WallCheck = true,
+    TracerThickness = 1,
+    TracerColor = Color3.fromRGB(255, 255, 255),
+    BoxColor = Color3.fromRGB(255, 0, 0),
+    BoxOutlineColor = Color3.fromRGB(0, 0, 0),
+    NameColor = Color3.fromRGB(255, 255, 255),
+    HealthOutlineColor = Color3.fromRGB(0, 0, 0),
+    HealthColor = Color3.fromRGB(0, 255, 0),
+    DistanceColor = Color3.fromRGB(255, 255, 255),
+    Teamcheck = false
+}
+
+-- Function to create and manage ESP for a new player entity
+local function onNewEntity(player)
+    if Players:GetPlayerFromCharacter(player) then
+        -- Create ESP for the player using the ESP Library
+        local esp_entity = ESP_Library.New(player)
+
+        -- Ensure we also track parts like HumanoidRootPart and Head manually
+        local character = player.Character
+        local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+        local head = character and character:FindFirstChild("Head")
+
+        if humanoidRootPart and head then
+            -- Now you can add custom logic to display ESP for HumanoidRootPart and Head
+            esp_entity.HumanoidRootPart = humanoidRootPart
+            esp_entity.Head = head
+        end
+
+        -- Clean up when player leaves
+        unload_list[player] = function()
+            esp_entity:Destroy()
+            table.remove(Entity_List, table.find(Entity_List, esp_entity))
+        end
+
+        table.insert(Entity_List, esp_entity)
+    end
+end
+
+-- Function to handle removal of player entities
+local function onRemove(player)
+    if unload_list[player] then
+        unload_list[player]()
+        unload_list[player] = nil
+    end
+end
+
+-- Connect the functions to the relevant events for when characters are added or removed
+Workspace.Characters.ChildAdded:Connect(onNewEntity)
+Workspace.Characters.ChildRemoved:Connect(onRemove)
+
+-- Initialize existing characters in the workspace
+for _, v in pairs(Workspace.Characters:GetChildren()) do
+    if v == Players.LocalPlayer.Character then
+        continue
+    end
+    onNewEntity(v)
+end
+
+-- Function to check if a player is behind a wall (optional for ESP filtering)
+local function isPlayerBehindWall(player)
+    local character = player.Character
+    if not character then
+        return false
+    end
+
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then
+        return false
+    end
+
+    local ray = Ray.new(workspace.CurrentCamera.CFrame.Position, (rootPart.Position - workspace.CurrentCamera.CFrame.Position).Unit * (rootPart.Position - workspace.CurrentCamera.CFrame.Position).Magnitude)
+    local hit, position = workspace:FindPartOnRayWithIgnoreList(ray, {Players.LocalPlayer.Character, character})
+    
+    return hit and hit:IsA("Part")
+end
+
+-- Function to update the ESP display for all entities
+local function updateEsp()
+    for player, esp in pairs(Entity_List) do
+        local character = player.Character
+        local team = player.Team
+        if character and (not ESP_SETTINGS.Teamcheck or (team and team ~= Players.LocalPlayer.Team)) then
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            local head = character:FindFirstChild("Head")
+            local humanoid = character:FindFirstChild("Humanoid")
+            local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
+            local shouldShow = not isBehindWall and ESP_SETTINGS.Enabled
+
+            if rootPart and head and humanoid and shouldShow then
+                local position, onScreen = workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position)
+                if onScreen then
+                    local hrp2D = workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position)
+                    local charSize = (workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0)).Y - workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, 2.6, 0)).Y) / 2
+                    local boxSize = Vector2.new(math.floor(charSize * 1.8), math.floor(charSize * 1.9))
+                    local boxPosition = Vector2.new(math.floor(hrp2D.X - charSize * 1.8 / 2), math.floor(hrp2D.Y - charSize * 1.6 / 2))
+
+                    -- Show Name if enabled
+                    if ESP_SETTINGS.ShowName and ESP_SETTINGS.Enabled then
+                        esp.name.Visible = true
+                        esp.name.Text = string.lower(player.Name)
+                        esp.name.Position = Vector2.new(boxSize.X / 2 + boxPosition.X, boxPosition.Y - 16)
+                        esp.name.Color = ESP_SETTINGS.NameColor
+                    else
+                        esp.name.Visible = false
+                    end
+
+                    -- Show Box if enabled
+                    if ESP_SETTINGS.ShowBox and ESP_SETTINGS.Enabled then
+                        if ESP_SETTINGS.BoxType == "2D" then
+                            esp.boxOutline.Size = boxSize
+                            esp.boxOutline.Position = boxPosition
+                            esp.box.Size = boxSize
+                            esp.box.Position = boxPosition
+                            esp.box.Color = ESP_SETTINGS.BoxColor
+                            esp.box.Visible = true
+                            esp.boxOutline.Visible = true
+                        end
+                    end
+
+                    -- Show Health if enabled
+                    if ESP_SETTINGS.ShowHealth and humanoid and humanoid.Health > 0 then
+                        local health = humanoid.Health
+                        local maxHealth = humanoid.MaxHealth
+                        local healthBarHeight = math.floor(charSize * 1.8)
+                        local healthPercentage = health / maxHealth
+                        local healthBarWidth = math.floor(charSize * 0.2)
+                        local healthBarPosition = Vector2.new(boxPosition.X - healthBarWidth - 5, boxPosition.Y)
+                        esp.healthOutline.Size = Vector2.new(healthBarWidth + 2, healthBarHeight)
+                        esp.healthOutline.Position = healthBarPosition
+                        esp.healthOutline.Color = ESP_SETTINGS.HealthOutlineColor
+                        esp.healthOutline.Visible = true
+                        esp.health.Size = Vector2.new(healthBarWidth * healthPercentage, healthBarHeight)
+                        esp.health.Position = healthBarPosition
+                        esp.health.Color = ESP_SETTINGS.HealthColor
+                        esp.health.Visible = true
+                    else
+                        esp.healthOutline.Visible = false
+                        esp.health.Visible = false
+                    end
+
+                    -- Show Distance if enabled
+                    if ESP_SETTINGS.ShowDistance and ESP_SETTINGS.Enabled then
+                        local distance = math.floor((workspace.CurrentCamera.CFrame.Position - rootPart.Position).Magnitude)
+                        esp.distance.Visible = true
+                        esp.distance.Text = string.format("%d studs", distance)
+                        esp.distance.Position = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 5)
+                        esp.distance.Color = ESP_SETTINGS.DistanceColor
+                    else
+                        esp.distance.Visible = false
+                    end
+                end
+            end
+        else
+            -- Remove ESP if player is not valid or should not be shown
+            removeEsp(player)
+        end
+    end
+end
+
+-- Function to remove ESP from a player
+local function removeEsp(player)
+    local esp = Entity_List[player]
+    if not esp then return end
+
+    for _, drawing in pairs(esp) do
+        drawing:Remove()
+    end
+
+    Entity_List[player] = nil
+end
+
+-- Render the ESP regularly on each frame
+RunService.RenderStepped:Connect(function()
+    if ESP_SETTINGS.Enabled then
+        updateEsp()
+    end
+end)
+
+-- Event to create ESP when a player is added to the game
+Players.PlayerAdded:Connect(function(player)
+    createEsp(player)
+end)
+
+-- Event to handle when a player is removed
+Players.PlayerRemoving:Connect(function(player)
+    removeEsp(player)
+end)
+
+-- Function to create ESP for a player
+local function createEsp(player)
+    -- Create ESP elements (box, name, health, etc.) for the player
+    local esp = {
+        tracer = create("Line", {
+            Thickness = ESP_SETTINGS.TracerThickness,
+            Color = ESP_SETTINGS.TracerColor,
+            Transparency = 0.5
+        }),
+        boxOutline = create("Square", {
+            Color = ESP_SETTINGS.BoxOutlineColor,
+            Thickness = 3,
+            Filled = false
+        }),
+        box = create("Square", {
+            Color = ESP_SETTINGS.BoxColor,
+            Thickness = 1,
+            Filled = false
+        }),
+        name = create("Text", {
+            Color = ESP_SETTINGS.NameColor,
+            Outline = true,
+            Center = true,
+            Size = 13
+        }),
+        healthOutline = create("Line", {
+            Thickness = 3,
+            Color = ESP_SETTINGS.HealthOutlineColor
+        }),
+        health = create("Line", {
+            Thickness = 1
+        }),
+        distance = create("Text", {
+            Color = Color3.new(1, 1, 1),
+            Size = 12,
+            Outline = true,
+            Center = true
+        }),
+        boxLines = {},
+    }
+
+    -- Store ESP data for the player
+    Entity_List[player] = esp
+    Entity_List[player]["skeletonlines"] = {}
+end
+
+-- Function to create a drawing object (used for ESP elements like box, name, etc.)
+local function create(class, properties)
+    local drawing = Drawing.new(class)
+    for property, value in pairs(properties) do
+        drawing[property] = value
+    end
+    return drawing
+end
